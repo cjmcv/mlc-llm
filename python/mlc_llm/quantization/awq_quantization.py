@@ -99,6 +99,9 @@ class AWQQuantize:  # pylint: disable=too-many-instance-attributes
                 self.config = config
                 self.quant_map = quant_map
 
+            # 没有绑定量化函数到quant_map中，即表示在load模型weight时，不会进行参数的量化操作。
+            # 即当前mlc-llm版本，仅支持加载量化好的awq模型，在load weight时直接加载，不对参数做额外处理。
+            # 这里的quantize_model仅仅是对nn.Module的转换。在load时会对加载到该AWQQuantize节点上，推理时也根据AWQQuantize来推理计算。
             def visit_module(self, name: str, node: nn.Module) -> Any:
                 """
                 The visiting method for awq quantization of nn.Module nodes.
@@ -164,6 +167,7 @@ class AWQQuantize:  # pylint: disable=too-many-instance-attributes
                 if out_shape is None
                 else out_shape
             ),
+            # awq有自己的zero_point, 而group_quantization（int4）中的zero_point固定为7.
             fcompute=lambda i, j: tir.multiply(
                 tir.subtract(float_weight[i, j], float_zeros[i, j // self.group_size]),
                 scale[i, j // self.group_size],

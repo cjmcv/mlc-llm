@@ -40,6 +40,7 @@ class FTQuantize:  # pylint: disable=too-many-instance-attributes
     num_elem_per_storage: int = 0
     max_int_value: int = 0
 
+    # 表明 FTQuantize是指定参数下的GroupQuantize，分组大小为32，布局为"NK"
     def fallback_group_quantize(self) -> GroupQuantize:
         """
         The fallback group quantization config for other parameters.

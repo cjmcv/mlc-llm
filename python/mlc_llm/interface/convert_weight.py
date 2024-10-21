@@ -52,8 +52,10 @@ class ConversionArgs:  # pylint: disable=too-many-instance-attributes
         print(f"  {bold('--output'):<25} {self.output}", file=out)
         print(out.getvalue().rstrip())
 
-
+# 模型格式转换函数
+# 
 def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-locals
+    # pre_shards 预分片，主要用于多GPU
     pre_shards_num = os.getenv("MLC_INTERNAL_PRESHARD_NUM")
     # model config & quantization config
     model_config = args.model.config.from_file(args.config)
@@ -65,9 +67,30 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
         raise NotImplementedError
     if pre_shards_num is not None:
         model_config.tensor_parallel_shards = int(pre_shards_num)
+    # model.quantize 是对应MODEL类所支持的量化类型 (model\model.py#270)，及其对应量化接口的映射表
+    # 如qwen2中，按分组量化进行
+    # quantize={
+    #     "no-quant": qwen2_quantization.no_quant,
+    #     "group-quant": qwen2_quantization.group_quant,
+    #     "ft-quant": qwen2_quantization.ft_quant,
+    # },
+    #
+    # args.model.quantize[args.quantization.kind] 通过 args.quantization.kind("group-quant") 转为对应量化函数（“qwen2_quantization.group_quant”）
+    # 对应 model\qwen2\qwen2_quantization.py#14，里面是该模型的分组量化操作接口。通过输入参数, 在qwen2_quantization.group_quant里调用 
+    # GroupQuantize（quantization\group_quantization.py#28）的 quantize_model 函数，完成从非量化模型到量化模型的转换。
+    #
+    # 输出得到量化后的模型 model (nn.Module) 和量化表 quantize_map (QuantizeMapping)
+    # 注意，此时的输出仅是完成从非量化模型到量化模型的转换，实际权重并未进行量化，需要根据量化表，在下面加载权重的时候再进行权重的量化。
+    #      量化表里包含有每个node的量化情况，可量化节点有nn.Linear / nn.Embedding / MixtralExperts三种，会对这些node进行类型的替换，并设定量化函数。
+    #      (quantization\group_quantization.py#110)
     model, quantize_map = args.model.quantize[args.quantization.kind](
         model_config, args.quantization
     )
+    # args.model是MODEL，MODEL.model是qwen2_model.QWen2LMHeadModel，是nn.Module类型，在tvm中处于前端位置。
+    # 经过量化后得到的 model 也是nn.Module类型，里面的参数已被量化所修改。
+    # export_tvm (relax\frontend\nn\core.py#447)，将 nn.Module 转为 TVM IRModule和参数。
+    # get_default_spec (model\qwen2\qwen2_model.py#343) 是 指定模型的nn.Module的 每个输入名称映射到规范的字典，它定义了输入形状和dtype。
+    # 模型导出时，需要根据这份规范字典来导出。
     _, _named_params, _ = model.export_tvm(  # type: ignore[misc]
         spec=model.get_default_spec(),  # type: ignore[attr-defined]
         allow_extern=True,
@@ -75,10 +98,12 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
     named_params = dict(_named_params)
 
     if pre_shards_num is not None:
+        # 如果是多GPU并行，则将模型参数分发到多个GPU上
         named_params, preshard_funcs = apply_preshard(named_params, int(pre_shards_num), args)
     else:
         preshard_funcs = None
 
+    # 检查参数的name / shape 和 type。
     def _check_param(name: str, param: NDArray):
         nonlocal named_params
         if name not in named_params:
@@ -118,7 +143,10 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
 
     def _param_generator() -> Iterator[Tuple[str, NDArray]]:
         nonlocal total_params, total_bytes
+        # Target.from_device检测对应device是否有效
         with Target.from_device(args.device), tqdm.redirect():
+            # args.source_format 表示权重的格式（loader\loader.py#9）
+            # 有 huggingface-torch / huggingface-safetensor / awq 三种格式，但都对应着HuggingFaceLoader一个类。
             loader = LOADER[args.source_format](
                 path=args.source,
                 extern_param_map=args.model.source[args.source_format](
@@ -126,10 +154,14 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
                 ),
                 quantize_param_map=quantize_map,
             )
+            # HuggingFaceLoader会加载和解析HuggingFace格式，
+            # 在加载权重的同时，根据上面得到的量化模型结构和量化表，将需要量化的节点的参数进行量化。（loader\huggingface_loader.py#121）
+            # 并将其转换为mlc-llm的格式，函数返回参数及其名字
             for name, param in loader.load(device=args.device, preshard_funcs=preshard_funcs):
                 _check_param(name, param)
                 param_names.add(name)
-                param = param.copyto(cpu_device())
+                param = param.copyto(cpu_device()) # CJM_TODO: WHY？
+                # math.prod()是一个用于计算可迭代对象中所有元素乘积的函数
                 total_bytes += math.prod(param.shape) * DataType(param.dtype).itemsize()
                 yield name, param
         total_params = loader.stats.total_param_num

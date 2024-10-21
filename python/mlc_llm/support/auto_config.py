@@ -116,7 +116,9 @@ def detect_config(config: str) -> Path:
     logger.info("%s model configuration: %s", FOUND, config_json_path)
     return config_json_path
 
-
+# 检测模型类型，在未指定的情况下会从config文件的找到，如qwen2的config.json文件中会有 "model_type": "qwen2"，从而找到qwen2的字样。
+# 进而从MODLE (mlc_llm\model\model.py)中拿到和返回对应模型类，
+# 模型类 会涉及到三个文件，如qwen2的qwen2_loader.py / qwen2_model.py / qwen2_quantization.py
 def detect_model_type(model_type: str, config: Path) -> "Model":
     """Detect the model type from the configuration file. If `model_type` is "auto", it will be
     inferred from the configuration file. Otherwise, it will be used as the model type, and sanity

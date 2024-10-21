@@ -13,7 +13,8 @@ from mlc_llm.support.auto_config import detect_config, detect_model_type
 from mlc_llm.support.auto_device import detect_device
 from mlc_llm.support.auto_weight import detect_weight
 
-
+# mlc_llm convert_weight /root/autodl-tmp/Qwen/Qwen2-7B-Instruct  --quantization q4f16_1  -o /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC
+# 输入路径会包含权重文件 x.safetensors, config文件config.json，
 def main(argv):
     """Parse command line argumennts and apply quantization."""
 
@@ -79,15 +80,17 @@ def main(argv):
     )
 
     parsed = parser.parse_args(argv)
+    # 拿到模型路径（source）和 weight格式（source_format），weight格式为"huggingface-torch", "huggingface-safetensor", "awq"
     parsed.source, parsed.source_format = detect_weight(
         weight_path=_parse_source(parsed.source, parsed.config),
         config_json_path=parsed.config,
         weight_format=parsed.source_format,
     )
+    # 拿到模型类，对应到 mlc_llm\model 文件夹里的模型类
     model = detect_model_type(parsed.model_type, parsed.config)
     convert_weight(
         config=parsed.config,
-        quantization=QUANTIZATION[parsed.quantization],
+        quantization=QUANTIZATION[parsed.quantization],  # 拿到量化类(quantization\quantization.py)
         model=model,
         device=parsed.device,
         source=parsed.source,

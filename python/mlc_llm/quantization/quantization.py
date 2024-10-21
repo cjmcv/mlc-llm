@@ -27,6 +27,19 @@ It is also required to have the following method:
         ...
 """
 
+# GroupQuantize: 分组量化，将一个tensor划分为多个组，每个组可以独立地使用一组量化参数。
+# AWQQuantize：Activation-aware Weight Quantization，激活感知量化，也可能会涉及到分组，但与传统分组量化不同。
+# FTQuantize：FasterTransformer中的量化方式
+# PerTensorQuantize：逐tensor量化，一个tensor用一组量化参数。
+# 注意 per-channel量化可以看成是 分组的数量等同于通道数 的 分组量化的特殊版本。
+#      即量化精度 per-tensor < groupwise, per-tensor < per-channel。
+#      而groupwise和per-channel的颗粒度取决于分组数量，如分组数量小于通道数，则 groupwise < per-channel; 
+#                                                   如分组数量大于通道数，则 groupwise > per-channel。分组数量是可以大于通道数的
+#
+# 每个量化类会包含有三个类，如 GroupQuantize 里有 GroupQuantizeLinear / GroupQuantizeEmbedding / GroupQuantizeMixtralExperts，
+#                           由主类GroupQuantize进行统一调用。
+#
+# # CJM_TODO: 动态量化不需要保存scale，则也不需要校准数据集？？？？
 QUANTIZATION: Dict[str, Quantization] = {
     "q0f16": NoQuantize(
         name="q0f16",

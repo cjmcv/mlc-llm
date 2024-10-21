@@ -23,11 +23,18 @@ def convert_uint_to_float(  # pylint: disable=too-many-arguments
     ft_reorder: Optional[bool] = False,
 ) -> te.Tensor:
     """Convert a quantized uint weight to an unquantized float weight."""
+    # 如int4，1111=1<<4-1, 按storage_dtype为uint32算，则tir_bin_mask为00000000 00000000 00000000 00001111
     tir_bin_mask = tir.const((1 << bits) - 1, storage_dtype)
     if out_shape is None:
-        out_shape = weight.shape
-        out_shape[axis] *= num_elem_per_storage
+        out_shape = weight.shape                # 此时权重维度是基于storage_type的uint32来算的，对于int4，num_elem_per_storage为8.
+        out_shape[axis] *= num_elem_per_storage # Linear层传的axis就是量化的axis，其他量化层是-1
     axis = axis if axis >= 0 else len(out_shape) + axis
+    # 按out_shape进行索引，weight是uint32存储，则每次取出一个uint32，以idx[axis] // num_elem_per_storage，即同一个uint32会被重复取8次。
+    # idx[axis] % num_elem_per_storage是从0到7，
+    # 0(0+0), 1(4+0), 2(0+1), 3(4+1), 4(0+2), 5(4+2), 6(0+3), 7(4,3)
+    #      -> 0-0,  1-4, 2-1,  3-5, 4-2,  5-6,  6-3, 7-7  
+    # *bit -> 0-0, 1-16, 2-4, 3-20, 4-8, 5-24, 6-12, 7-28, 
+    # 后面的数字是位移的偏移量，将对应4位移动到最右边，与tir_bin_mask做位与运算。
     return te.compute(
         shape=out_shape,
         fcompute=lambda *idx: tir.bitwise_and(
@@ -58,7 +65,7 @@ def is_moe_gate(name: str, node: nn.Linear) -> bool:
     """Check whether the parameter is the MoE gate layer."""
     return name.endswith("gate") and isinstance(node.out_features, int) and node.out_features <= 64
 
-
+# 针对指定设备，执行一些常规transform优化，编译量化函数。
 def compile_quantize_func(mod: IRModule, device) -> Callable:
     """Compile a quantization function for a given device."""
     device_type = device.MASK2STR[device.device_type]

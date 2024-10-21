@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 FOUND = green("Found")
 NOT_FOUND = red("Not found")
 
-
+# 检测 weight文件路径 / config路径 和 weight文件格式类型、
+# 路径方面，输入模型文件夹，正常即可找到其weight和config。
+# weight文件格式类型支持："huggingface-torch", "huggingface-safetensor", "awq"; 
+#              暂不支持："ggml", "gguf" 
 def detect_weight(
     weight_path: Path,
     config_json_path: Path,
