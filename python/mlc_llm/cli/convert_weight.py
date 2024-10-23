@@ -86,7 +86,7 @@ def main(argv):
         config_json_path=parsed.config,
         weight_format=parsed.source_format,
     )
-    # 拿到模型类，对应到 mlc_llm\model 文件夹里的模型类
+    # 拿到大模型类 MODEL (python\mlc_llm\model\model.py#269)
     model = detect_model_type(parsed.model_type, parsed.config)
     convert_weight(
         config=parsed.config,

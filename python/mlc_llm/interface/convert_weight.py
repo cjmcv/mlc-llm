@@ -147,6 +147,7 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
         with Target.from_device(args.device), tqdm.redirect():
             # args.source_format 表示权重的格式（loader\loader.py#9）
             # 有 huggingface-torch / huggingface-safetensor / awq 三种格式，但都对应着HuggingFaceLoader一个类。
+            # model.source 对应 model文件夹中特定模型的loader.py的huggingface函数（model\qwen2\qwen2_loader.py#16），用于得到
             loader = LOADER[args.source_format](
                 path=args.source,
                 extern_param_map=args.model.source[args.source_format](

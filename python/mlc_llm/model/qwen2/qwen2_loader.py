@@ -12,7 +12,8 @@ from mlc_llm.quantization import Quantization
 
 from .qwen2_model import QWen2Config, QWen2LMHeadModel
 
-
+# 在加载模型前（interface\convert_weight.py#153），获取mlc和pytorch参数名字的映射关系。
+# 从而在加载模型时，将pytorch的权重加载到对应的mlc模型层中。
 def huggingface(model_config: QWen2Config, quantization: Quantization) -> ExternMapping:
     """Returns a parameter mapping that maps from the names of MLC LLM parameters to
     the names of HuggingFace PyTorch parameters.
