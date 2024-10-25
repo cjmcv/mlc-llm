@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     if "CUDA" in enabled_backends:
         cmake_config_str += f"set(USE_THRUST ON)\n"
-
+    
     # FlashInfer related
     use_flashInfer = False  # pylint: disable=invalid-name
     while True:
@@ -81,7 +81,15 @@ if __name__ == "__main__":
                 break
             else:
                 print(f"Invalid input: {user_input}. FlashInfer requires 80, 86, 89, or 90.")
-
+    elif "CUDA" in enabled_backends:
+        while True:
+            user_input = input("Enter your CUDA compute capability: ")
+            if user_input in ["80", "86", "89", "90"]:
+                cmake_config_str += f"set(CMAKE_CUDA_ARCHITECTURES {user_input})\n"
+                break
+            else:
+                print(f"Invalid input: {user_input}. requires 80, 86, 89, or 90.")
+        
     print("\nWriting the following configuration to config.cmake...")
     print(cmake_config_str)
 

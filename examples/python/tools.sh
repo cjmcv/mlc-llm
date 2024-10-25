@@ -3,7 +3,11 @@
 # 01 for autodl
 # usage: source examples/python/tools.sh 0
 
+# tvm: cp ../cmake/config.cmake .
+# mlc: python ../cmake/gen_cmake_config.py
+#
 # cmake .. && cmake --build . --parallel $(nproc) 
+
 
 setup_on_autodl() {
     echo "setup_on_autodl"
