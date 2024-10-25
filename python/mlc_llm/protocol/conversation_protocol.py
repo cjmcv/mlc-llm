@@ -19,7 +19,9 @@ class MessagePlaceholders(Enum):
 
 T = TypeVar("T", bound="BaseModel")
 
-
+# 该类指定了会话的 转换模板和历史记录。
+# 转换模板与模型绑定，不同的模型有不同的模板。
+# 在给定会话模板下，从中会按模板约定的格式生成的相应prompt。主要调用的是 as_prompt 函数
 class Conversation(BaseModel):
     """Class that specifies the convention template of conversation
     and contains the conversation history.
@@ -110,6 +112,9 @@ class Conversation(BaseModel):
         """Convert from a json dictionary"""
         return Conversation.model_validate(json_dict)
 
+    # 将会话模板和历史数据转换成一个prompt. 
+    # 通常一次对话只有一个prompt: "请为我生成一句鼓励学习的名言"
+    # 但也有多个prompt的情况，如连接式的: "先为我总结一下这篇文章的要点，然后根据要点写一篇读后感"
     # pylint: disable=too-many-branches
     def as_prompt(self, config=None) -> List[Any]:
         """Convert the conversation template and history messages to

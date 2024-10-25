@@ -3,6 +3,8 @@
 # 01 for autodl
 # usage: source examples/python/tools.sh 0
 
+# cmake .. && cmake --build . --parallel $(nproc) 
+
 setup_on_autodl() {
     echo "setup_on_autodl"
     export PYTHONPATH=/root/llm/mlc-llm/3rdparty/tvm/python:$PYTHONPATH

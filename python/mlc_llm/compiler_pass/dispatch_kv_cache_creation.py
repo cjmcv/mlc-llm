@@ -81,10 +81,13 @@ class DispatchKVCacheCreation:  # pylint: disable=too-many-instance-attributes
         self.flashinfer = flashinfer
         self.metadata = metadata
 
+    # 
     def transform_module(self, mod: IRModule, _ctx: tvm.transform.PassContext) -> IRModule:
         """Entrypoint"""
         func_dict = {}
         creation_func = None
+        # 从IRModule中找到 "create_paged_kv_cache" 函数, 该函数是用于创建paged_kv_cache的
+        # 其他函数全部放到 func_dict 中.
         for g_var, func in mod.functions_items():
             # Try to find the `create_paged_kv_cache` func.
             if g_var.name_hint == "create_paged_kv_cache":
@@ -95,16 +98,26 @@ class DispatchKVCacheCreation:  # pylint: disable=too-many-instance-attributes
         if creation_func is None:
             return mod
 
+        # 此时 func_dict 里有除了 "create_paged_kv_cache" 以外的所有函数, 重新构建一个IRModule
         new_mod = IRModule(func_dict)
         if mod.attrs is not None:
             new_mod = new_mod.with_attrs(mod.attrs)
 
+        # 将"create_paged_kv_cache"函数所绑定的参数提取出来
         kwargs = extract_creation_args(creation_func)
+        # 部分参数赋值到metadata中, metadata是多个compile_pass共享的, 而这个compile_pass是第一个, 所以也顺便提取出来了.
         self.attach_kv_cache_metadata(kwargs)
 
+        # 基于新的IRModule, 构建一个builder, 
+        # 并向里面添加名字为 "create_tir_paged_kv_cache" 和 "create_flashinfer_paged_kv_cache" 两个函数, 分别对应两种paged_kv_cache的实现.
+        # 注: 如果未设置添加对flashinfer的支持, 则flashinfer的创建函数不会被添加.
         bb = relax.BlockBuilder(new_mod)
         self.create_tir_paged_kv_cache(bb, kwargs)
         self.create_flashinfer_paged_kv_cache(bb, kwargs)
+        
+        # 结束构建过程, 将新的IRModule返回出去.
+        # 至此, IRModule中的函数"create_paged_kv_cache"变成了"create_tir_paged_kv_cache" 和 "create_flashinfer_paged_kv_cache" 两个函数
+        # CJM_TODO: "create_paged_kv_cache" 是在哪里加入IRModule的? 猜测可能是在get_default_spec中(mlc_llm\model\qwen2\qwen2_model.py#367)
         return bb.finalize()
 
     def attach_kv_cache_metadata(self, kwargs: Dict[str, Any]):

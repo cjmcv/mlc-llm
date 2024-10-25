@@ -8,7 +8,12 @@ from tvm.script import tir as T
 
 from ..support.max_thread_check import get_max_num_threads_per_block
 
-
+# 基础: softmax是将输入向量转为概率分布向量, 基本公式是 对于输出σ(zj) = e^(zj) / Σ(i=1 to n) e^(zi)
+#      带温度参数（Temperature）的 Softmax, 则公式是 σ(zj)=e^(zj/T) / Σ(i=1 to n) e^(zi/T)。
+#      当T==1时, 就是普通的softmax, 当T越大, 则输出的概率分布会更 “平滑”, 各个类别之间的概率差异会变小; 
+#                                如果T越小, 输出的概率分布会更 “尖锐”, 即率会更集中在具有较大输入值的类别上.
+#
+# 这里的优化是计算softmax函数时，为了保证数值稳定性，如何处理不同的温度参数情况，并通过内核代码实现这些逻辑。
 @tvm.transform.module_pass(opt_level=0, name="AttachSoftmaxWithTemperature")
 class AttachSoftmaxWithTemperature:  # pylint: disable=too-few-public-methods
     """Rewrites one-shot softmax into two-stage softmax."""

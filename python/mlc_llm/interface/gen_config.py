@@ -102,6 +102,7 @@ def gen_config(  # pylint: disable=too-many-locals,too-many-arguments,too-many-b
 ):
     """Entrypoint of MLC Chat configuration generation."""
     # Step 1. Initialize `mlc-chat-config.json` using `config.json`
+    # 如拿到qwen2的会话模板 Conversation (conversation_template\qwen2.py#8), 主要用于将将会话模板和历史数据转换成一个prompt.
     conversation_reg = ConvTemplateRegistry.get_conv_template(conv_template)
     if conversation_reg is None:
         logger.warning(

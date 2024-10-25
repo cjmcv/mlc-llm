@@ -6,6 +6,9 @@ import tvm
 from tvm import IRModule, relax, tir
 
 
+# 在一些优化问题中，变量的取值范围是受到约束的. 可在计算图中通过附加变量的上下界信息，
+# 可以帮助优化器更好地理解变量的可能取值范围，从而进行更有针对性的优化。
+# AttachVariableBounds 作为一个优化pass来实现。它会遍历计算图中的每个变量，并根据其定义和使用情况附加相应的上下界信息。
 @tvm.transform.module_pass(opt_level=0, name="AttachVariableBounds")
 class AttachVariableBounds:  # pylint: disable=too-few-public-methods
     """Attach variable bounds to each Relax function, which primarily helps with memory planning."""
@@ -51,6 +54,16 @@ class AttachMemoryPlanAttr:  # pylint: disable=too-few-public-methods
         return mod
 
 
+# 目前mlc-llm的compile中写死的 cuda_graph_symbolic_capture_hints (python\mlc_llm\interface\compile.py#172) 如下:
+# cuda_graph_symbolic_capture_hints = {
+#     "batch_decode": ["batch_size"],
+#     "batch_decode_to_last_hidden_states": ["batch_size"],
+#     "batch_verify": ["batch_size", "seq_len"],
+#     "batch_verify_to_last_hidden_states": ["batch_size", "seq_len"],
+# }
+# 左边是函数名字, 右边是attr
+# func.with_attr是基于func自身新创建一个func, 并根据指定的"relax.rewrite_cuda_graph.capture_symbolic_vars"这个key, 
+# 找到对应的映射表, 并将该映射表的内容改成输入的attr, 重新生成func.
 @tvm.transform.module_pass(opt_level=0, name="AttachCUDAGraphCaptureHints")
 class AttachCUDAGraphSymbolicCaptureHints:  # pylint: disable=too-few-public-methods
     """Attach CUDA graph capture hints to the IRModule"""

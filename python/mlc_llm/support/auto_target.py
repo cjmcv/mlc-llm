@@ -66,6 +66,7 @@ def _detect_target_gpu(hint: str) -> Tuple[Target, BuildFunc]:
         hint += ":generic"
     if hint == "auto" or hint in AUTO_DETECT_DEVICES:
         target: Optional[Target] = None
+        # 检测参数传入指定的device是否存在
         device = detect_device(hint)
         if device is not None:
             device_str = device2str(device)
@@ -81,6 +82,7 @@ def _detect_target_gpu(hint: str) -> Tuple[Target, BuildFunc]:
             bold(device_str),
             target.export(),
         )
+        # _build_default定义了一个编译函数，该函数会调用relax.build，并导出编译后的库文件
         return target, _build_default()
     if hint in PRESET:
         preset = PRESET[hint]

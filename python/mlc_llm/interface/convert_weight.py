@@ -87,8 +87,12 @@ def _convert_args(args: ConversionArgs) -> None:  # pylint: disable=too-many-loc
         model_config, args.quantization
     )
     # args.model是MODEL，MODEL.model是qwen2_model.QWen2LMHeadModel，是nn.Module类型，在tvm中处于前端位置。
-    # 经过量化后得到的 model 也是nn.Module类型，里面的参数已被量化所修改。
+    # 经过量化后得到的 model 也是nn.Module类型，里面的参数已被量化所修改(有权重的一些信息, 但不含权重数据)。
     # export_tvm (relax\frontend\nn\core.py#447)，将 nn.Module 转为 TVM IRModule和参数。
+    # IRModule: tvm一系列的优化策略都是基于IRModule进行的. 
+    # params: 对应着模型权重的一些参数.
+    # ext_mods: 在模型中被使用的其他模块.
+    # 这里只用到了params, 用于检查参数type/shape等情况, 防止量化模型的转换出问题?
     # get_default_spec (model\qwen2\qwen2_model.py#343) 是 指定模型的nn.Module的 每个输入名称映射到规范的字典，它定义了输入形状和dtype。
     # 模型导出时，需要根据这份规范字典来导出。
     _, _named_params, _ = model.export_tvm(  # type: ignore[misc]

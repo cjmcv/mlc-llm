@@ -23,6 +23,7 @@ from mlc_llm.support.auto_config import (
 )
 from mlc_llm.support.auto_target import detect_system_lib_prefix, detect_target_and_host
 
+# mlc_llm compile /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC/mlc-chat-config.json --device cuda -o /root/autodl-tmp/Qwen/libs/Qwen2-7B-Instruct-q4f16_1-MLC-cuda.so
 
 def main(argv):
     """Parse command line arguments and call `mlc_llm.compiler.compile`."""
@@ -117,9 +118,17 @@ def main(argv):
         help=HELP["debug_dump"] + " (default: %(default)s)",
     )
     parsed = parser.parse_args(argv)
+    # 例子命令中指定了--device cuda，未指定host(默认auto)
+    # 检测gpu和cpu，用Target存放。
+    # build_func是定义了一个编译函数，该函数会调用relax.build，并导出编译后的库文件。(mlc_llm\support\auto_target.py#85)
+    # _build_default的输入参数是: mod: IRModule -> 输入的需要被编译的IRModule。
+    #                            args: "CompileArgs" -> 主要传入目标设备
+    #                            pipeline: Union[None, str, tvm.transform.Pass] -> 编译pipeline，包含各种优化pass
     target, build_func = detect_target_and_host(parsed.device, parsed.host)
+    # 获得MODEL中的Model，Model.model是qwen2_model.QWen2LMHeadModel
     parsed.model_type = detect_model_type(parsed.model_type, parsed.model)
     parsed.quantization = detect_quantization(parsed.quantization, parsed.model)
+    # 检测iOS/Android系统库前缀, 以识别加载应用程序所需的库, IOS和安卓的命名规则都有一定规范.
     parsed.system_lib_prefix = detect_system_lib_prefix(
         parsed.device, parsed.system_lib_prefix, parsed.model_type.name, parsed.quantization.name
     )

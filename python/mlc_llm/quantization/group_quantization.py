@@ -239,7 +239,7 @@ class GroupQuantize:  # pylint: disable=too-many-instance-attributes
         # 使用 Relax 模块，将weight的shape和type作为类型信息，构建一个 weight_var。
         # 使用bb.function创建一个名为main的函数，输入参数是 weight_var。
         # 函数内，首先进入数据流式上下文，将weight_var和一些其他信息作为绑定参数，提供给_quantize函数，作为一个张量表达式操作TE, 
-        # 使用bb.emit_te发射出，将结果lv赋值给gv，作为函数返回值。使用bb.finalize()结束IRModule的构建。
+        # 使用bb.emit_te发射出，将结果lv赋值给gv，作为函数返回值。使用bb.finalize()结束IRModule的构建, 返回构建好的IRModule。
         def _create_quantize_func() -> IRModule:
             bb = relax.BlockBuilder()  # pylint: disable=invalid-name
             weight_var = relax.Var("weight", relax.TensorStructInfo(weight.shape, weight.dtype))

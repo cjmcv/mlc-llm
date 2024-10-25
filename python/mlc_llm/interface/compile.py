@@ -130,6 +130,7 @@ def _compile(args: CompileArgs, model_config: ConfigBase):
 
     model_config = args.overrides.apply(model_config)
     with args.target:
+        # 设置如flashinfer/faster_transformer/cutlass等是否参与编译的全局标志位, 在后面的编译操作时, 会访问这些标志位以决定进否进入相关优化.
         op_ext.enable(
             target=args.target,
             flashinfer=args.opt.flashinfer,
@@ -153,14 +154,19 @@ def _compile(args: CompileArgs, model_config: ConfigBase):
             raise NotImplementedError(
                 "KN layout (q3f16_0 and q4f16_0) is not supported for tensor parallelism"
             )
+        # 在模型权重转换时也有调用到 (mlc_llm\interface\convert_weight.py#86)
+        # 输出得到量化后的模型 model (nn.Module) 和量化表 quantize_map (QuantizeMapping), 不含权重数据, 且quantize_map在这里不需要用到,用下划线来取.
         model, _ = args.model.quantize[args.quantization.kind](model_config, args.quantization)
         # Step 2. Exporting the model to TVM Unity
+        # 在模型权重转换时也有调用到 (mlc_llm\interface\convert_weight.py#95)
+        # 从量化的nn.Module转为 TVM IRModule, 与权重对应的参数, 还有模型有用到的其他模块.
         logger.info("Exporting the model to TVM Unity compiler")
         mod, named_params, ext_mods = model.export_tvm(
             spec=model.get_default_spec(),  # type: ignore
             allow_extern=True,
         )
         # Step 3. Running relax compilation pipeline
+        # 运行编译pipeline
         logger.info("Running optimizations using TVM Unity")
         additional_tirs = _apply_preproc_to_params_and_check_pipeline(named_params, model_config)
         variable_bounds = _get_variable_bounds(model_config)
@@ -185,6 +191,10 @@ def _compile(args: CompileArgs, model_config: ConfigBase):
         logger.info("Registering metadata: %s", metadata)
         metadata["params"] = [_get_param_metadata(name, param) for name, param in named_params]
         with PassContext(config={"relax.backend.use_cuda_graph": args.opt.cudagraph}):
+            # 使用前面拿到的编译函数进行编译(python\mlc_llm\cli\compile.py#127)
+            # mode是需要编译的IRModule, args会传入目标设备信息, pipeline是优化pipeline.
+            # 优化pipeline从relax.get_pipeline中获取, 其中"mlc_llm"的pipeline在这里被注册(mlc_llm\compiler_pass\pipeline.py#78)
+            # pipeline函数是输入IRModule,经过一系列的compile_pass, 然后输出IRModule.
             args.build_func(
                 mod,
                 args,

@@ -10,7 +10,17 @@ from tvm.script import tir as T
 from mlc_llm.op.batch_spec_verify import batch_spec_verify
 from mlc_llm.op.top_p_pivot import top_p_pivot, top_p_renorm
 
-
+# 什么是GPU采样函数
+# 当语言模型输出一个词汇表上的概率分布后，GPU采样函数会根据这个概率分布来抽取样本。
+# 最常见的采样方法是按照概率进行随机采样。例如，如果单词 “apple” 的概率是 0.2，“banana” 的概率是 0.3，“cherry” 的概率是 0.5，
+# 那么采样函数会根据这些概率来决定抽取哪个单词，就好像在一个装有不同比例的 “apple”“banana”“cherry” 标签的盒子里随机抽取一样。
+# 常见的采样函数有: 贪心采样(每次选概率最大的);
+#                 温度采样, 温度参数T越小,则概率分布越尖锐; 温度参数越大, 则概率分布越平缓(compiler_pass\attach_softmax_with_temperature.py#17)
+#                 TOP-k采样:先从概率分布中选取概率最高的k个单词，然后在这k个单词构成的子分布中进行采样。
+#               **TOP-P采样:也叫核采样（Nucleus Sampling）, 它会选择概率累计达到p（例如p = 0.9）的单词集合，然后在这个集合中进行采样.
+#                       其核心优势在于能够自适应地根据概率分布的情况选择合适数量的单词进行采样,相比于Top-k采样，它更加灵活，能够更好地平衡文本生成的确定性和多样性。
+#
+# 把GPU采样函数添加到IRModule中.
 @tvm.transform.module_pass(opt_level=0, name="AttachGPUSamplingFunc")
 class AttachGPUSamplingFunc:  # pylint: disable=too-few-public-methods
     """Attach GPU sampling functions to IRModule."""

@@ -10,7 +10,7 @@ from mlc_llm.quantization import QUANTIZATION
 from mlc_llm.support.argparse import ArgumentParser
 from mlc_llm.support.auto_config import detect_config, detect_model_type
 
-
+# mlc_llm gen_config /root/autodl-tmp/Qwen/Qwen2-7B-Instruct  --quantization q4f16_1 --conv-template qwen2 -o /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC
 def main(argv):
     """Parse command line argumennts and call `mlc_llm.compiler.gen_config`."""
     parser = ArgumentParser("MLC LLM Configuration Generator")
@@ -97,7 +97,7 @@ def main(argv):
         help=HELP["output_gen_mlc_chat_config"] + " (required)",
     )
     parsed = parser.parse_args(argv)
-    model = detect_model_type(parsed.model_type, parsed.config)
+    model = detect_model_type(parsed.model_type, parsed.config) # # 拿到大模型类 MODEL
     gen_config(
         config=parsed.config,
         model=model,

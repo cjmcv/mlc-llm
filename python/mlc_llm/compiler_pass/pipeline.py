@@ -96,19 +96,36 @@ def _mlc_llm_pipeline(  # pylint: disable=too-many-arguments
     ext_mods = ext_mods or []
     tensor_parallel_shards = metadata.get("tensor_parallel_shards", 1)
 
+    # tvm.transform.Sequential将所需的compile_passl类构造的对象都打包在一起,作为一个完整的编译pipeline, 
+    # 输入需要编译的IRModule, 依次经过打包的这些compile_pass类的transform_module方法, 得到转换后的IRModule. 
+    #
+    # 打包的compile_pass都会有这样的修饰器 @tvm.transform.module_pass(opt_level=0, name="DispatchKVCacheCreation"), 
+    # 修饰器的位置在 module_pass (3rdparty\tvm\python\tvm\ir\transform.py#325)
+    # compile_pass里面会定义有 transform_module 方法, 是执行编译优化的主体函数. CJM_TODO: transform_module在哪里被调用,如何跟c++关联?
+    #
+    # CJM_TODO: 每一个compile_pass的含义.
     @tvm.transform.module_pass(opt_level=0)
     def _pipeline(mod: tvm.ir.IRModule, _ctx: tvm.transform.PassContext) -> tvm.ir.IRModule:
         seq = tvm.transform.Sequential(
             [
+                #####
                 # Phase 0. Add additional information for compilation and remove unused Relax func
+                # 将IRModule中的函数"create_paged_kv_cache"变成了"create_tir_paged_kv_cache" 和 "create_flashinfer_paged_kv_cache" 两个函数
                 DispatchKVCacheCreation(target, flashinfer, metadata),
+                # 为了保证数值稳定性，如何处理不同的温度参数情况，并通过内核代码实现这些逻辑。
                 AttachSoftmaxWithTemperature(target),
+                # 附加变量的上下界信息, 便于优化
                 AttachVariableBounds(variable_bounds),
+                # 设置cuda graph需要处理的提示符. 主要是几个batch操作, 加入如batch_size等重要信息,使cuda graph能针对性处理.
                 AttachCUDAGraphSymbolicCaptureHints(cuda_graph_symbolic_capture_hints),
+                # 将流水线并行所需要的arallel_shards绑定到对应函数中
                 AttachPipelineParallelStages(metadata["pipeline_parallel_stages"]),
+                # 将logit处理用的TIR functions转为IRModule.
                 AttachLogitProcessFunc(target),
                 AttachAdditionalPrimFuncs(additional_tirs),
+                # 将embeding张量分配的relas函数附加到IRModule中.
                 AttachAllocEmbeddingTensorFunc(metadata),
+                # 把GPU采样函数添加到IRModule中.
                 AttachGPUSamplingFunc(target, variable_bounds),
                 AttachSpecDecodeAuxFuncs(tensor_parallel_shards),
                 AttachMemoryPlanAttr(),
