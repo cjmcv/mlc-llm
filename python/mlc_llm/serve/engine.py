@@ -1403,7 +1403,140 @@ class AsyncMLCEngine(engine_base.MLCEngineBase):
         self.state.async_streamers.pop(request_id, None)
         self._ffi["abort_request"](request_id)
 
+# # 例子: qwen2-7B中的 mlc-chat-config.json
+# {
+#   "version": "0.1.0",
+#   "model_type": "qwen2",
+#   "quantization": "q4f16_1",
+#   "model_config": {
+#     "hidden_act": "silu",
+#     "hidden_size": 3584,
+#     "intermediate_size": 18944,
+#     "num_attention_heads": 28,
+#     "num_hidden_layers": 28,
+#     "num_key_value_heads": 4,
+#     "rms_norm_eps": 1e-06,
+#     "rope_theta": 1000000.0,
+#     "vocab_size": 152064,
+#     "tie_word_embeddings": false,
+#     "context_window_size": 32768,
+#     "prefill_chunk_size": 2048,
+#     "tensor_parallel_shards": 1,
+#     "head_dim": 128,
+#     "dtype": "float32",
+#     "max_batch_size": 128
+#   },
+#   "vocab_size": 152064,
+#   "context_window_size": 32768,
+#   "sliding_window_size": -1,
+#   "prefill_chunk_size": 2048,
+#   "attention_sink_size": -1,
+#   "tensor_parallel_shards": 1,
+#   "pipeline_parallel_stages": 1,
+#   "temperature": 0.7,
+#   "presence_penalty": 0.0,
+#   "frequency_penalty": 0.0,
+#   "repetition_penalty": 1.05,
+#   "top_p": 0.8,
+#   "tokenizer_files": [
+#     "tokenizer.json",
+#     "vocab.json",
+#     "merges.txt",
+#     "tokenizer_config.json"
+#   ],
+#   "tokenizer_info": {
+#     "token_postproc_method": "byte_level",
+#     "prepend_space_in_encode": false,
+#     "strip_space_in_decode": false
+#   },
+#   "conv_template": {
+#     "name": "qwen2",
+#     "system_template": "<|im_start|>system\n{system_message}<|im_end|>\n",
+#     "system_message": "You are a helpful assistant.",
+#     "system_prefix_token_ids": null,
+#     "add_role_after_system_message": true,
+#     "roles": {
+#       "user": "<|im_start|>user",
+#       "assistant": "<|im_start|>assistant"
+#     },
+#     "role_templates": {
+#       "user": "{user_message}",
+#       "assistant": "{assistant_message}",
+#       "tool": "{tool_message}"
+#     },
+#     "messages": [],
+#     "seps": [
+#       "<|im_end|>\n"
+#     ],
+#     "role_content_sep": "\n",
+#     "role_empty_sep": "\n",
+#     "stop_str": [
+#       "<|endoftext|>",
+#       "<|im_end|>"
+#     ],
+#     "stop_token_ids": [
+#       151643,
+#       151645
+#     ],
+#     "function_string": "",
+#     "use_function_calling": false
+#   },
+#   "pad_token_id": 151643,
+#   "bos_token_id": 151643,
+#   "eos_token_id": [
+#     151645,
+#     151643
+#   ]
+# }
 
+# # tokenizer.json: 包含了分词器的完整配置信息，包括词汇表、分词规则、特殊标记等。
+#                 它用于描述分词器的行为，定义了如何将输入的文本转换为模型可以处理的 token 序列。例如
+# # tokenizer_config.json, 分词器的配置参数，如分词器类型等更宏观的配置信息.
+# 如下:
+# {
+#   "add_prefix_space": false,
+#   "added_tokens_decoder": {
+#     "151643": {
+#       "content": "<|endoftext|>",
+#       "lstrip": false,
+#       "normalized": false,
+#       "rstrip": false,
+#       "single_word": false,
+#       "special": true
+#     },
+#     "151644": {
+#       "content": "<|im_start|>",
+#       "lstrip": false,
+#       "normalized": false,
+#       "rstrip": false,
+#       "single_word": false,
+#       "special": true
+#     },
+#     "151645": {
+#       "content": "<|im_end|>",
+#       "lstrip": false,
+#       "normalized": false,
+#       "rstrip": false,
+#       "single_word": false,
+#       "special": true
+#     }
+#   },
+#   "additional_special_tokens": ["<|im_start|>", "<|im_end|>"],
+#   "bos_token": null,
+#   "chat_template": "{% for message in messages %}{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
+#   "clean_up_tokenization_spaces": false,
+#   "eos_token": "<|im_end|>",
+#   "errors": "replace",
+#   "model_max_length": 131072,
+#   "pad_token": "<|endoftext|>",
+#   "split_special_tokens": false,
+#   "tokenizer_class": "Qwen2Tokenizer",
+#   "unk_token": null
+# }
+
+# 最外层类, 与AsyncMLCEngine相对应, 与之不同的是该类提供sync的接口.
+# 基本的成员是Chat和Completion, 相对于AsyncMLCEngine的是AsyncChat和AsyncCompletion
+# 
 class MLCEngine(engine_base.MLCEngineBase):
     """The MLCEngine in MLC LLM that provides the synchronous
     interfaces with regard to OpenAI API.

@@ -146,6 +146,7 @@ def _process_model_args(
                     f"The `model_lib` you passed in is not a file: {model.model_lib}.\n"
                 )
         else:
+            # 会使用"mlc_llm.compile"去编译生成库。
             # Run jit if model_lib is not provided
             # NOTE: we only import jit when necessary
             # so the engine do not have to depend on compilation
@@ -464,6 +465,7 @@ class EngineState:
         if self.async_event_loop is None:
             self.async_event_loop = asyncio.get_event_loop()
 
+    # 为 AsyncMLCEngine 而设的的回调函数, 流式返回生成结果.
     def _async_request_stream_callback(self, delta_outputs: List[data.RequestStreamOutput]) -> None:
         """The request stream callback function for AsyncMLCEngine to stream back
         the request generation results.
@@ -482,6 +484,7 @@ class EngineState:
             self._async_request_stream_callback_impl, delta_outputs
         )
 
+    # 流失返回生成结果的回调函数 的 主体
     def _async_request_stream_callback_impl(
         self, delta_outputs: List[data.RequestStreamOutput]
     ) -> None:
@@ -538,6 +541,7 @@ class EngineState:
             stream.push(outputs)
             self.record_event(request_id, event="finish callback")
 
+    # 为 MLCEngine 而设的回调函数, 流式返回生成结果.
     def _sync_request_stream_callback(self, delta_outputs: List[data.RequestStreamOutput]) -> None:
         """The request stream callback function for MLCEngine to stream back
         the request generation results.
@@ -545,7 +549,12 @@ class EngineState:
         # Put the delta outputs to the queue in the unblocking way.
         self.sync_output_queue.put_nowait(delta_outputs)
 
-
+# 实现 MLCEngine 和 AsyncMLCEngine 共享的通用函数。
+# 封装了一个在内部独立线程上持续运行的ThreadedEngine(cpp\serve\threaded_engine.h#30)，通过暴露的`AddRequest`函数接收新的请求, 
+# 并通过设置回调函数 流式地返回增量生成的结果。
+ 
+# MLCEngine和AsyncMLCEngine继承了这个MLCEngineBase类，并实现了各自的方法来处理从回调函数接收到的delta生成的结果，
+# 并以标准API协议的形式产生处理后的delta结果（delta表示差值的意思，对应上面的流失返回的增量生成结果）。
 class MLCEngineBase:  # pylint: disable=too-many-instance-attributes,too-few-public-methods
     """The base engine class, which implements common functions that
     are shared by MLCEngine and AsyncMLCEngine.
@@ -602,33 +611,44 @@ class MLCEngineBase:  # pylint: disable=too-many-instance-attributes,too-few-pub
 
         # - Initialize engine state and engine.
         self.state = EngineState(enable_tracing)
+        # mlc.serve.create_threaded_engine (cpp\serve\threaded_engine.cc#400) 定义了多个调用cc函数的入口. 
+        # 是一个函数集合, 可以分别通过下面的字符串进行调用.
         module = tvm.get_global_func("mlc.serve.create_threaded_engine", allow_missing=False)()
         self._ffi = {
             key: module[key]
             for key in [
-                "add_request",
-                "abort_request",
-                "run_background_loop",
-                "run_background_stream_back_loop",
-                "reload",
-                "init_threaded_engine",
-                "exit_background_loop",
-                "create_request",
-                "get_complete_engine_config",
-                "reset",
-                "debug_call_func_on_all_worker",
+                "add_request",                        # AddRequest, 添加新请求指令, 往instruction_queue_里加指令kAddRequest,并notify一个线程
+                "abort_request",                      # AbortRequest,  中断请求指令, 参数是需要被中断的请求的id号, 如上往instruction_queue_里加指令k.
+                 # RunBackgroundLoop, 启动内部循环处理请求的线程, 循环处理instruction_queue_的指令, 
+                 # 派发到实际的background_engine(cpp\serve\engine.h)中进行处理.
+                "run_background_loop",               
+                # RunBackgroundStreamBackLoop, 启动结果流式回调的线程, 主要涉及到变量request_stream_callback_inputs_的消费处理; 
+                # 该变量会在reload函数中, 创建Engine时,以回调函数的方式注册进去. (cpp\serve\threaded_engine.cc#274 / #282)
+                # 在Engine处理数据后, 有结果时会进行生产赋值.
+                "run_background_stream_back_loop", 
+                "reload",                             # Reload, 重新加载指令, 基于新的engine config重新加载Engine
+                "init_threaded_engine",               # InitThreadedEngine, 初始化ThreadedEngine, 需设置目前device和流式返回结果的回调函数
+                "exit_background_loop",               # ExitBackgroundLoop, 退出请求处理线程
+                "create_request",                     # CreateRequest, 创建一个请求
+                "get_complete_engine_config",         # GetCompleteEngineConfigJSONString, 获取到完整的engine config.
+                "reset",                              # Reset, 重置指令, 恢复到刚初始化后的状态
+                "debug_call_func_on_all_worker",      # DebugCallFuncOnAllAllWorker, Call the given global function on all workers. Only for debug purpose
             ]
         }
+        # 创建Tokenizer, 接口均直接调用cc实现
         self.tokenizer = Tokenizer(model_args[0][0])
         self._ffi["init_threaded_engine"](
-            device,
-            self.state.get_request_stream_callback(kind),
-            self.state.trace_recorder,
+            device,                                        # 需要运行的设备
+            self.state.get_request_stream_callback(kind),  # 流式返回输出结果的回调函数, 里面会根据kind[async/sync]来选择对应函数.
+            self.state.trace_recorder,                     # 请求的事件跟踪记录器, 用于调试?
         )
 
-        background_loop = self._ffi["run_background_loop"]
-        background_stream_back_loop = self._ffi["run_background_stream_back_loop"]
+        background_loop = self._ffi["run_background_loop"]  # 获取启动内部线程的函数
+        background_stream_back_loop = self._ffi["run_background_stream_back_loop"] # 获取启动流式回调的线程的函数
 
+        # 启动两个内部线程, 开始工作
+        # 一个负责处理提交的指令并进行任务分发, 主体计算任务会被分发到background_engine_中; 
+        # 一个负责将background_engine_的计算结果流式输出;
         # - Create the background engine-driving thread and start the loop.
         self._background_loop_thread: threading.Thread = threading.Thread(target=background_loop)
         self._background_stream_back_loop_thread: threading.Thread = threading.Thread(
@@ -642,7 +662,7 @@ class MLCEngineBase:  # pylint: disable=too-many-instance-attributes,too-few-pub
         engine_config.model_lib = model_args[0][1]
         engine_config.additional_models = model_args[1:]  # type: ignore
         engine_config.mode = mode
-        self._ffi["reload"](engine_config.asjson())
+        self._ffi["reload"](engine_config.asjson()) # 创建Engine实例 (cpp\serve\engine.cc#851)
         self.engine_config = EngineConfig.from_json(self._ffi["get_complete_engine_config"]())
         self.max_input_sequence_length = min(
             self.engine_config.max_single_sequence_length,

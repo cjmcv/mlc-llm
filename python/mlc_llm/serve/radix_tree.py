@@ -8,7 +8,8 @@ from tvm.runtime import Object, ShapeTuple
 
 from . import _ffi_api
 
-
+# 基于分页的基数树实现的prefix cache, 与cc中的cpp\serve\prefix_cache.h相对应
+# 在EngineConfig.prefix_cache_mode中设置"radix"启用 (python\mlc_llm\serve\config.py)
 @tvm._ffi.register_object("mlc.serve.PagedRadixTree")  # pylint: disable=protected-access
 class PagedRadixTree(Object):
     """The paged radix tree to manage prefix and sequence."""

@@ -10,10 +10,33 @@ from tvm import tir
 from tvm.relax.frontend.nn.llm.kv_cache import PagedKVCache as TVMPagedKVCache
 from tvm.relax.frontend.nn.llm.kv_cache import RopeMode
 
-## python基础
+############################
+### python基础
 # 函数返回"PagedKVCache"，加了双引号，表示这是前向引用。
 # 即在类PagedKVCache内部定义了一个create_generic方法，这个方法返回的是这个PagedKVCache类本身，
 # 但是在定义这个方法的时候，类PagedKVCache可能还没有被完全定义。所以加双引号告诉python解析器，"PagedKVCache"是一个稍后会被定义的类型名称，而不是一个未定义的变量。
+###
+
+### KVCache 原理
+# 在生成每个新的token时， 都需要对前面已经生成的词进行处理。如Transformer架构中的自注意力机制需要计算每个词与其他词的相关性。
+# 如果没有 KV Cache，每次生成新的词都要重新计算所有词之间的关系。而有了 KV Cache，之前计算过的词的键值对（代表着它们在注意力机制中的相关特征）
+# 被存储起来，当生成下一个词时，只需从缓存中获取这些键值对，无需重新计算，大大提高了计算速度。
+###
+
+### PagedKVCache 实现原理
+#   paged分页, 将整个缓存空间划分为 固定大小 的页面. 维护一个映射表，用于记录键(或键的一部分)与页面之间的对应关系。
+# 当需要访问一个键值对时, 首先通过这个映射表找到对应的页面, 然后在该页面内查找具体的键值对。
+#   当插入新的键值对时，根据键的哈希值(或其他确定的分配规则)来确定存储在哪个页面中, 使得数据在各个页面之间分布相对均匀.
+#   当缓存空间已满，需要存储新的键值对时，就需要替换掉现有的页面内容。常见的替换策略有最近最少使用（LRU - Least Recently Used）策略
+# 在页面级别的应用，即替换掉最近最少被访问的页面。还有基于频率的策略，如最不经常使用（LFU - Least Frequently Used）页面替换。以提高缓存命中率。
+# 空闲的页面被标记，后续插入时使用。
+#
+# 相较于普通kvcache: 
+# * 检索从 一级检索(直接找kv键值对，可能需要遍历) 变成 二级检索(先找页面，在页内找kv)，检索与操作效率高。
+# * 插入删除操作颗粒度从kv 变成了 页面, 键值对长短不一，多次操作容易产生碎片；页面长度固定，且回收不释放内存，无碎片产生。
+# * 分页使键值对之间多了一层基于页面的组织关系，如同一类别的键值对放在一个页面里, 在按类别数据预取和持久化时会更高效。
+###
+############################
 
 # 这个类继承于tvm里的PagedKVCache (tvm\python\tvm\relax\frontend\nn\llm\kv_cache.py#83), 
 # 同一文件下有FlashInferPagedKVCache 和 TIRPagedKVCache, 均和该文件下的PagedKVCache为同一级别类，均为TVMPagedKVCache的派生类。
