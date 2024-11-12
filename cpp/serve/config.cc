@@ -697,6 +697,8 @@ Result<MemUsageEstimationResult> EstimateMemoryUsageOnMode(
        inferred_config});
 }
 
+// 1. 获取最大sequence length和prefill size，batch size参数。
+// 2. 获取模型参数大小和计算期间用的临时buffer的大小
 Result<InferrableEngineConfig> InferrableEngineConfig::InferForKVCache(
     EngineMode mode, Device device, double gpu_memory_utilization,
     const std::vector<picojson::object>& model_configs,

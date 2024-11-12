@@ -11,6 +11,8 @@ namespace mlc {
 namespace llm {
 namespace serve {
 
+// 以推测性模式和普通模式进行划分，推测性模型会有多个模型，目前暂时不支持。
+// 所以会使用普通模型，该模式下，构建了NewRequestPrefill / BatchJumpForward 和 BatchDecode三种action。
 Array<EngineAction> CreateEngineActions(Array<Model> models, EngineConfig engine_config,
                                         std::vector<picojson::object> model_configs,
                                         std::vector<ModelWorkspace> model_workspaces,

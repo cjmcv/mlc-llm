@@ -31,6 +31,7 @@ using namespace tvm::runtime;
 class Sampler;
 
 /*!
+ * 包含模型的一些tensor，由模型创建，由engine来管理。
  * \brief The workspace tensors that may be shared across different
  * calls to Model. For example, the prefill action use the `embeddings`
  * workspace for the concatenated embeddings of different sequences.
@@ -40,11 +41,13 @@ struct ModelWorkspace {
   /*!
    * \brief The embedding tensor. It can be either an NDArray when tensor
    * model parallelism is not enabled, or a DRef when using tensor model parallelism.
+   * 词嵌入向量的张量：如果没使用张量并行，就是普通的多维数组类型；使用了张量并行，则是DRef类型。
    */
   ObjectRef embeddings{nullptr};
   /*!
    * \brief The hidden_states tensor for the current batch. It can be either an NDArray when tensor
    * model parallelism is not enabled, or a DRef when using tensor model parallelism.
+   * 当前batch的隐藏层的张量：类型同embeddings
    */
   ObjectRef hidden_states{nullptr};
 
@@ -72,7 +75,11 @@ struct ModelWorkspace {
  *
  * It contains the following functions:
  *
- * Model related:
+ * Model related: 
+ * 1. 以token的id号作为输入，输出词嵌入向量；
+ * 2. 将一个序列的词嵌入向量作为输入，进行模型，推理得到logits（在应用激活函数(如softmax)之前的值，即最后一层的原始输出）
+ * 3. 每次将整个批次的最后一个提交token的嵌入向量作为输入，循环通过LLM推理，并返回batch中所有序列的logits。
+ * 4. 将logits，结合参数temperatures，计算softmax，得到概率分布。
  * - "token_embed": take token ids as input and return the embeddings,
  * - "batch_prefill": take embedding of a single sequence
  * as input, forward the embedding through LLM and return the logits,
@@ -94,6 +101,7 @@ class ModelObj : public Object {
   /*********************** Model Computation  ***********************/
 
   /*!
+   * 输入token的元组，计算嵌入向量。
    * \brief Compute embeddings for the input token ids.
    * When the input destination pointer is defined, it in-place writes the
    * embedding into the input destination array at the given offset.

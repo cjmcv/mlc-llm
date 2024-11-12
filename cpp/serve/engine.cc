@@ -293,14 +293,16 @@ class EngineImpl : public Engine {
     if (models_and_model_libs_res.IsErr()) {
       return TResult::Error(models_and_model_libs_res.UnwrapErr());
     }
+    // models_and_model_libs_res包含了目标变量和Result，Result在上面判断已经用过了，使用unwarp留下目标变量，以供后面使用。
     std::vector<std::pair<std::string, std::string>> models_and_model_libs =
         models_and_model_libs_res.Unwrap();
 
+    // 多模型针对投机性/推测性解码，目前不支持。仅支持单模型的情况。
     int num_model = models_and_model_libs.size();
     ICHECK_GE(num_model, 1);
     // - Initialize singleton states inside the engine.
     n->estate_->Reset();
-    n->request_stream_callback_ = std::move(request_stream_callback);
+    n->request_stream_callback_ = std::move(request_stream_callback); // 流式返回结果的回调函数
     n->trace_recorder_ = trace_recorder;
     n->device_ = device;
     // - Load model config, create a shared disco session when tensor
@@ -368,18 +370,24 @@ class EngineImpl : public Engine {
       }
     }
     // - Load model weights, create KV cache and workspace.
+    
     n->model_workspaces_.clear();
     for (const Model& model : n->models_) {
-      model->LoadParams();
+      model->LoadParams(); // 通过function table获取到全局注册的加载权重的函数，读取模型参数。
       model->SetMaxNumSequence(engine_config->max_num_sequence);
       model->SetPrefillChunkSize(engine_config->prefill_chunk_size);
+      // 基于上面获取或推测出来的参数，创建KVCache。创建函数也被注册到了function table中.
       model->CreateKVCache(engine_config->kv_cache_page_size, engine_config->max_num_sequence,
                            engine_config->max_total_sequence_length,
                            engine_config->prefill_chunk_size, engine_config->max_history_size);
+      // workspace指的是模型的一些计算过程用的tensor。
       n->model_workspaces_.push_back(
           ModelWorkspace{model->AllocEmbeddingTensor(), model->AllocHiddenStatesTensor()});
     }
     // - Initialize tokenizer and grammar
+    // tokenizer是分词器: 当用户输入文本请求时，分词器首先会对输入的文本进行分词操作，将其转换为模型可以理解的词元序列, 输入给模型。
+    //                   在生成文本输出时，模型会逐个生成词元，分词器会将这些生成的词元组合成连贯的文本，以便以更自然的方式呈现给用户。
+    // grammar是语法树: 需要基于token表去构建，
     n->tokenizer_ = Tokenizer::FromPath(engine_config->model, GetTokenizerInfo(model_configs[0]));
     n->token_table_ = n->tokenizer_->PostProcessedTokenTable();
     n->grammar_init_context_cache_ = GrammarInitContextCache(n->token_table_);
@@ -403,6 +411,7 @@ class EngineImpl : public Engine {
     if (engine_config->speculative_mode != SpeculativeMode::kDisable) {
       n->estate_->spec_draft_length = engine_config->spec_draft_length;
     }
+    // actions_是一个EngineAction类型的数组，普通模式下由NewRequestPrefill,BatchJumpForward 和 BatchDecode组成。
     n->actions_ = CreateEngineActions(
         n->models_, engine_config, model_configs, n->model_workspaces_, logit_processor, sampler,
         draft_token_workspace_manager, n->tokenizer_, n->trace_recorder_);
@@ -630,6 +639,8 @@ class EngineImpl : public Engine {
       }
     };
 
+    // num_shards: 分片数量，针对tensor并行，一个tensor不同部分分多个设备里。
+    // num_stages: 分步骤数量，针对pipeline并行，一个流水线的不同阶段分到多个设备里。
     int num_shards = -1;
     int max_num_stages = 1;
     std::vector<int> model_num_pipeline_stages;
@@ -652,7 +663,7 @@ class EngineImpl : public Engine {
     }
 
     Optional<Session> session = NullOpt;
-    int num_workers = num_shards * max_num_stages;
+    int num_workers = num_shards * max_num_stages; // 如果即不做tensor并行，也不做pipeline并行，则num_workers为1.
     if (num_workers > 1) {
 #ifndef MLC_SINGLE_GPU_ONLY
       constexpr const char* f_create_process_pool = "runtime.disco.create_process_pool";
@@ -677,6 +688,8 @@ class EngineImpl : public Engine {
       const std::string& yellow_text_begin = "\033[93m";
       const std::string& colored_text_end = "\033[0m";
       auto [socket_host, socket_port] = GetEnvSocketHostPort();
+      // 多设备并行并使用socket_host，则会采用SocketSession。
+      // 其他情况下使用ProcessSession：基于管道的多进程Session.
       if (max_num_stages > 1 && socket_host.has_value()) {
         // Use SocketSession when pipeline parallelism enabled and socket host and port are set.
         CHECK_GT(socket_port, 0)

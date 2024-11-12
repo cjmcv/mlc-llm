@@ -33,6 +33,13 @@ struct EngineCreationOutput {
   GenerationConfig default_generation_cfg;
 };
 
+// llm的请求服务引擎，可包含一个或多个llm模型，用于文本生成。
+// 如果有多个模型时，将会启用推测性推理(投机性，speculative inference)。
+// 该模式下，默认以0号模型为主模型，其他模型为辅。（目前版本仅支持单模型）
+// Engine会接受来自"AddRequest"的请求，然后持续生成结果直到结束，调用由request
+// 提供的回调函数，返回结果。
+// Engine的公共接口分为三类：1. engine管理；2.request管理；3.Step动作执行。
+// 其中Setp动作包含有prefill和decode。
 /*!
  * \brief The engine interface for request serving in MLC LLM.
  * The engine can run one or multiple LLM models internally for

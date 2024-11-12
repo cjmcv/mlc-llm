@@ -23,6 +23,7 @@ using namespace tvm;
 using namespace tvm::runtime;
 
 /****************** GenerationConfig ******************/
+// 与python的python\mlc_llm\serve\config.py#100文件相对应
 
 /*! \brief The response format of a request. */
 struct ResponseFormat {
@@ -46,6 +47,9 @@ enum class SpecialRequestKind : int {
   kQueryEngineMetrics = 1,
 };
 
+// 使用语法去限制推理行为：kConstraint仅用语法限制；kJumpForward(默认方式)在语法限制的同时，使用jump-forward decoding。
+// jump-forward decoding：
+//   
 /*! \brief Controls the behavior of inference with grammar constraint. */
 enum class GrammarExecutionMode : int {
   /*! \brief If grammar is provided for a request, use the grammar to constrain the output token. */
@@ -219,6 +223,7 @@ class EngineConfigNode : public Object {
    */
   float gpu_memory_utilization = 0.85;
   /*! \brief The number of consecutive tokens handled in each page in paged KV cache. */
+  // 一页里连续排着的tokens的数量
   int kv_cache_page_size = 16;
   /*!
    * \brief The maximum number of sequences that are allowed to be
@@ -246,7 +251,10 @@ class EngineConfigNode : public Object {
   int prefix_cache_max_num_recycling_seqs = -1;
 
   /*************** Speculative decoding ***************/
-
+  // 推测性解码（Speculative decoding）是一种加速文本生成的技术，
+  // 用小且快的辅助模型推测主模型下一个标记，达到减少主模型调用次数来提速。
+  // 主模型会验证辅助模型的推测，认为合理就接受，不合理就自己生成。
+  // 局限性：辅助模型推测可能不准，复杂语言结构等情况会导致文本质量下降
   /*! \brief The speculative mode. */
   SpeculativeMode speculative_mode = SpeculativeMode::kDisable;
   /*!

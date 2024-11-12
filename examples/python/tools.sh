@@ -22,12 +22,12 @@ setup_on_autodl() {
 
 cvt_on_autodl() {
     echo "cvt_on_autodl"
-    rm /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC /root/autodl-tmp/Qwen/libs/Qwen2-7B-Instruct-q4f16_1-MLC-cuda.so -r
+    rm /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct-q4f16_1-MLC /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct-q4f16_1-MLC /root/autodl-tmp/Qwen/libs/Qwen2-1___5B-Instruct-q4f16_1-MLC-cuda.so -r
     mkdir /root/autodl-tmp/Qwen/libs/
 
-    mlc_llm convert_weight /root/autodl-tmp/Qwen/Qwen2-7B-Instruct  --quantization q4f16_1  -o /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC
-    mlc_llm gen_config /root/autodl-tmp/Qwen/Qwen2-7B-Instruct  --quantization q4f16_1 --conv-template qwen2 -o /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC
-    mlc_llm compile /root/autodl-tmp/Qwen/Qwen2-7B-Instruct-q4f16_1-MLC/mlc-chat-config.json --device cuda -o /root/autodl-tmp/Qwen/libs/Qwen2-7B-Instruct-q4f16_1-MLC-cuda.so
+    mlc_llm convert_weight /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct  --quantization q4f16_1  -o /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct-q4f16_1-MLC
+    mlc_llm gen_config /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct  --quantization q4f16_1 --conv-template qwen2 -o /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct-q4f16_1-MLC
+    mlc_llm compile /root/autodl-tmp/Qwen/Qwen2-1___5B-Instruct-q4f16_1-MLC/mlc-chat-config.json --device cuda -o /root/autodl-tmp/Qwen/libs/Qwen2-1___5B-Instruct-q4f16_1-MLC-cuda.so
 }
 
 setup_on_host() {
